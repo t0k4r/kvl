@@ -8,27 +8,28 @@ import (
 )
 
 func TestXxx(t *testing.T) {
-	str, err := kvl.Open[string]("github.com.t0k4r.kvl.test")
+	s, err := kvl.Open[string, string]("github.com.t0k4r.kvl.test")
 	if err != nil {
 		slog.Error(err.Error())
 		t.Fail()
 	}
-	err = str.Delete("ok")
+	defer s.Close()
+	err = s.Delete("ok")
 	if err != nil {
 		slog.Error(err.Error())
 		t.Fail()
 	}
-	_, ok := str.Load("ok")
+	_, ok := s.Load("ok")
 	if ok {
 		slog.Error(err.Error())
 		t.Fail()
 	}
-	err = str.Store("ok", "abc")
+	err = s.Store("ok", "abc")
 	if err != nil {
 		slog.Error(err.Error())
 		t.Fail()
 	}
-	value, ok := str.Load("ok")
+	value, ok := s.Load("ok")
 	if !ok || value != "abc" {
 		t.Fail()
 	}

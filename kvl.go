@@ -10,15 +10,15 @@ import (
 
 const schema = `
 CREATE TABLE IF NOT EXISTS kvl_store (
-kvl_key TEXT PRIMARY KEY,
+kvl_key BLOB PRIMARY KEY,
 kvl_value BLOB);
 `
 
-type Store[T any] struct {
+type Store[K, V any] struct {
 	db *sql.DB
 }
 
-func Open[T any](name string) (store Store[T], err error) {
+func Open[K, V any](name string) (store Store[K, V], err error) {
 	if store.db, err = sql.Open("sqlite", name); err != nil {
 		return
 	}
@@ -27,44 +27,68 @@ func Open[T any](name string) (store Store[T], err error) {
 	}
 	return
 }
-func (s *Store[T]) Load(key string) (value T, ok bool) {
-	row := s.db.QueryRow("SELECT kvl_value FROM kvl_store WHERE kvl_key=$1", key)
+func (s *Store[K, V]) Close() error {
+	return s.db.Close()
+}
+
+func (s *Store[K, V]) Load(key K) (value V, ok bool) {
+	keyBlob, err := msgpack.Marshal(key)
+	if err != nil {
+		return
+	}
+	row := s.db.QueryRow("SELECT kvl_value FROM kvl_store WHERE kvl_key=$1", keyBlob)
 	if err := row.Err(); err != nil {
 		return
 	}
-	blob := []byte{}
-	if err := row.Scan(&blob); err != nil {
+	valueBlob := []byte{}
+	if err := row.Scan(&valueBlob); err != nil {
 		return
 	}
-	if err := msgpack.Unmarshal(blob, &value); err != nil {
+	if err := msgpack.Unmarshal(valueBlob, &value); err != nil {
 		return
 	}
 	return value, true
 }
-func (s *Store[T]) Store(key string, value T) error {
-	blob, err := msgpack.Marshal(value)
+func (s *Store[K, V]) Store(key K, value V) error {
+	keyBlob, err := msgpack.Marshal(key)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec("INSERT OR REPLACE INTO kvl_store(kvl_key,kvl_value) values ($1,$2)", key, blob)
+	valueBlob, err := msgpack.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec("INSERT OR REPLACE INTO kvl_store(kvl_key,kvl_value) values ($1,$2)", keyBlob, valueBlob)
 	return err
 }
-func (s *Store[T]) Delete(key string) error {
-	_, err := s.db.Exec("DELETE FROM kvl_store WHERE kvl_key=$1", key)
+func (s *Store[K, V]) Delete(key K) error {
+	keyBlob, err := msgpack.Marshal(key)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec("DELETE FROM kvl_store WHERE kvl_key=$1", keyBlob)
 	return err
 }
 
-func (s *Store[T]) All() iter.Seq2[string, T] {
-	return func(yield func(string, T) bool) {
-		rows, err := s.db.Query("SELECT kvl_key, kvl_value FROM kvl_stores")
+func (s *Store[K, V]) All() iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		rows, err := s.db.Query("SELECT kvl_key, kvl_value FROM kvl_store")
 		if err != nil {
 			return
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var key string
-			var value T
-			if err := rows.Scan(&key, &value); err != nil {
+			keyBlob := []byte{}
+			valueBlob := []byte{}
+			if err := rows.Scan(&keyBlob, &valueBlob); err != nil {
+				return
+			}
+			var key K
+			var value V
+			if err = msgpack.Unmarshal(keyBlob, &key); err != nil {
+				return
+			}
+			if err = msgpack.Unmarshal(valueBlob, &value); err != nil {
 				return
 			}
 			if !yield(key, value) {
@@ -73,16 +97,20 @@ func (s *Store[T]) All() iter.Seq2[string, T] {
 		}
 	}
 }
-func (s *Store[T]) Keys() iter.Seq[string] {
-	return func(yield func(string) bool) {
-		rows, err := s.db.Query("SELECT kvl_key FROM kvl_stores")
+func (s *Store[K, V]) Keys() iter.Seq[K] {
+	return func(yield func(K) bool) {
+		rows, err := s.db.Query("SELECT kvl_key FROM kvl_store")
 		if err != nil {
 			return
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var key string
-			if err := rows.Scan(&key); err != nil {
+			keyBlob := []byte{}
+			if err := rows.Scan(&keyBlob); err != nil {
+				return
+			}
+			var key K
+			if err = msgpack.Unmarshal(keyBlob, &key); err != nil {
 				return
 			}
 			if !yield(key) {
@@ -91,16 +119,20 @@ func (s *Store[T]) Keys() iter.Seq[string] {
 		}
 	}
 }
-func (s *Store[T]) Values() iter.Seq[T] {
-	return func(yield func(T) bool) {
-		rows, err := s.db.Query("SELECT kvl_value FROM kvl_stores")
+func (s *Store[K, V]) Values() iter.Seq[V] {
+	return func(yield func(V) bool) {
+		rows, err := s.db.Query("SELECT kvl_value FROM kvl_store")
 		if err != nil {
 			return
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var value T
-			if err := rows.Scan(&value); err != nil {
+			valueBlob := []byte{}
+			if err := rows.Scan(&valueBlob); err != nil {
+				return
+			}
+			var value V
+			if err = msgpack.Unmarshal(valueBlob, &value); err != nil {
 				return
 			}
 			if !yield(value) {
