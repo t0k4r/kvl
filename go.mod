@@ -1,6 +1,8 @@
 module github.com/t0k4r/kvl
 
-go 1.23.0
+go 1.23.1
+
+toolchain go1.23.3
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -10,6 +12,7 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/shamaton/msgpack/v2 v2.2.2 // indirect
+	github.com/t0k4r/x v0.0.0-20241107113255-25e50b949c3a // indirect
 	golang.org/x/sys v0.22.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.55.3 // indirect
